@@ -28,6 +28,21 @@ namespace ExcelFormulaExtractor
             return sb.ToString();
         }
 
+        private string prettyPrintExpressionDict(Dictionary<AST.Address, string> d1, Dictionary<AST.Address, AST.Expression> d2)
+        {
+            var sb = new StringBuilder();
+            foreach (var kvp in d2)
+            {
+                sb.Append(kvp.Key.A1Local());
+                sb.Append(" :\n");
+                sb.Append(d1[kvp.Key]);
+                sb.Append(" rewritten to:\n");
+                sb.Append(kvp.Value.ToFormula);
+                sb.Append("\n\n");
+            }
+            return sb.ToString();
+        }
+
         private void extract_Click(object sender, RibbonControlEventArgs e)
         {
             Application app = Globals.ThisAddIn.Application.Application;
@@ -40,6 +55,20 @@ namespace ExcelFormulaExtractor
                     new Tuple<AST.Address, string>(addr, graph.getFormulaAtAddress(addr))
                 ).ToDictionary(tup => tup.Item1, tup => tup.Item2);
             System.Windows.Forms.MessageBox.Show(prettyPrintFormulaDict(formulas));
+            var asts =
+                formulas
+                .Select(kvp => new Tuple<AST.Address, AST.Expression>(kvp.Key, inlineExpression(kvp.Key, graph)))
+                .ToDictionary(tup => tup.Item1, tup => tup.Item2);
+            System.Windows.Forms.MessageBox.Show(prettyPrintExpressionDict(formulas, asts));
+        }
+
+        private AST.Expression inlineExpression(AST.Address addr, Depends.DAG graph)
+        {
+            // get top-level AST
+            var ast = graph.getASTofFormulaAt(addr);
+
+            // merge subtrees
+            return ExpressionTools.flattenedExpression(ast, graph);
         }
     }
 }

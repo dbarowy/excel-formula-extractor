@@ -210,6 +210,10 @@
       <Project>{71e3af28-8088-4f9d-9392-858964d72947}</Project>
       <Name>ParcelCOMShim</Name>
     </ProjectReference>
+    <ProjectReference Include="..\..\ExpressionInliner\ExpressionInliner.fsproj">
+      <Project>{86e79857-09cc-4c42-9443-c69173cb6b72}</Project>
+      <Name>ExpressionInliner</Name>
+    </ProjectReference>
     <ProjectReference Include="..\..\xl2fpcore\parcel\FParsecCS\FParsecCS.csproj">
       <Project>{35888456-3095-4133-92c8-6dd3205f4c2d}</Project>
       <Name>FParsecCS</Name>
