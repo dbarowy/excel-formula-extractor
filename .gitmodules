@@ -1,0 +1,6 @@
+[submodule "xl2fpcore"]
+	path = xl2fpcore
+	url = git@github.com:dbarowy/xl2fpcore.git
+[submodule "Depends"]
+	path = Depends
+	url = git@github.com:dbarowy/Depends.git
