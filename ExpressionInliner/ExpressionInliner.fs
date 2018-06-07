@@ -16,10 +16,15 @@ and flattenedRef(ref: AST.Reference)(graph: DAG) : AST.Expression =
     match ref with
     | :? AST.ReferenceRange as r ->
         let addrs = r.Range.Addresses()
-        let asts = addrs |> Array.map (fun addr -> flattenedAddr addr graph)
-        let union = asts |> Array.reduce (fun acc ast -> AST.BinOpExpr(",", acc, ast))
-        union
-    | :? AST.ReferenceAddress as r -> flattenedAddr r.Address graph
+        let asts = addrs |> Array.map (fun addr -> flattenedAddr addr graph) |> Array.toList
+        let env = new AST.Env(addrs.[0].Path, addrs.[0].WorkbookName, addrs.[0].WorksheetName)
+        let union = AST.ReferenceUnion(env, asts)
+        // recursively inline
+        flattenedExpression (AST.ReferenceExpr(union)) graph
+    | :? AST.ReferenceAddress as r ->
+        let faddr = flattenedAddr r.Address graph
+        // recursively inline
+        flattenedExpression faddr graph
     | :? AST.ReferenceNamed -> raise (FlattenOperationNotSupportedException "Named references not yet supported.")
     | :? AST.ReferenceFunction as r ->
         let args = r.ArgumentList
@@ -30,6 +35,11 @@ and flattenedRef(ref: AST.Reference)(graph: DAG) : AST.Expression =
     | :? AST.ReferenceConstant as c -> AST.ReferenceExpr(c)
     | :? AST.ReferenceString as s -> AST.ReferenceExpr(s) 
     | :? AST.ReferenceBoolean as b -> AST.ReferenceExpr(b)
+    | :? AST.ReferenceUnion as ru ->
+        let refs = ru.References
+        let asts = refs |> List.map (fun expr -> flattenedExpression expr graph)
+        let union = AST.ReferenceUnion(ru.Environment, asts)
+        AST.ReferenceExpr(union)
     | _ -> raise (FlattenOperationNotSupportedException "Unknown reference type.")
 
 // try to get AST; if that doesn't work, get the value

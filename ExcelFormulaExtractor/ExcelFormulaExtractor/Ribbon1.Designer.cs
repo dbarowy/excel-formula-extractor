@@ -37,6 +37,8 @@
             this.tab1 = this.Factory.CreateRibbonTab();
             this.group1 = this.Factory.CreateRibbonGroup();
             this.extract = this.Factory.CreateRibbonButton();
+            this.ExtractThis = this.Factory.CreateRibbonButton();
+            this.ExtractToFPCore = this.Factory.CreateRibbonButton();
             this.tab1.SuspendLayout();
             this.group1.SuspendLayout();
             this.SuspendLayout();
@@ -51,14 +53,28 @@
             // group1
             // 
             this.group1.Items.Add(this.extract);
+            this.group1.Items.Add(this.ExtractThis);
+            this.group1.Items.Add(this.ExtractToFPCore);
             this.group1.Label = "group1";
             this.group1.Name = "group1";
             // 
             // extract
             // 
-            this.extract.Label = "Extract";
+            this.extract.Label = "Extract All";
             this.extract.Name = "extract";
             this.extract.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.extract_Click);
+            // 
+            // ExtractThis
+            // 
+            this.ExtractThis.Label = "Extract This";
+            this.ExtractThis.Name = "ExtractThis";
+            this.ExtractThis.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.ExtractThis_Click);
+            // 
+            // ExtractToFPCore
+            // 
+            this.ExtractToFPCore.Label = "Extract All to FPCore";
+            this.ExtractToFPCore.Name = "ExtractToFPCore";
+            this.ExtractToFPCore.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.ExtractToFPCore_Click);
             // 
             // Ribbon1
             // 
@@ -79,6 +95,8 @@
         internal Microsoft.Office.Tools.Ribbon.RibbonTab tab1;
         internal Microsoft.Office.Tools.Ribbon.RibbonGroup group1;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton extract;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton ExtractThis;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton ExtractToFPCore;
     }
 
     partial class ThisRibbonCollection
