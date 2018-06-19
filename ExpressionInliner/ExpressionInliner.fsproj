@@ -55,6 +55,9 @@
     <None Include="Script.fsx" />
     <Content Include="packages.config" />
     <Compile Include="ExpressionInliner.fs" />
+    <Compile Include="Utils.fs" />
+    <Compile Include="Feature.fs" />
+    <Compile Include="ReferenceVector.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Microsoft.Office.Interop.Excel, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c" />
@@ -81,6 +84,11 @@
     <ProjectReference Include="..\xl2fpcore\parcel\Parcel\ExcelParser.fsproj">
       <Name>ExcelParser</Name>
       <Project>{6de2a2b9-c029-4bdb-8992-d16276471d9f}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\xl2fpcore\xl2fpcore\xl2fpcore.fsproj">
+      <Name>xl2fpcore</Name>
+      <Project>{3811543e-4d53-44ff-8d85-7f9e9d68dd71}</Project>
       <Private>True</Private>
     </ProjectReference>
   </ItemGroup>
