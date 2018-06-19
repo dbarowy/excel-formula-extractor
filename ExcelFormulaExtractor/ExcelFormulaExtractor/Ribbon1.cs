@@ -116,8 +116,9 @@ namespace ExcelFormulaExtractor
             var ast = graph.getASTofFormulaAt(addr);
 
             // merge subtrees
-            return ExpressionTools.flattenedExpression(ast, graph);
+            var fexpr = ExpressionTools.flattenExpression(ast, graph);
 
+            return fexpr.Expression;
         }
 
         private Dictionary<AST.Address, FPCoreAST.FPCore> convertFormulas(Dictionary<AST.Address, AST.Expression> exprs)
@@ -129,7 +130,7 @@ namespace ExcelFormulaExtractor
                         {
                             var fpc = XL2FPCore.FormulaToFPCore(kvp.Value);
                             return new Tuple<AST.Address, FPCoreAST.FPCore>(kvp.Key, fpc);
-                        } catch (XL2FPCore.InvalidExpressionException e)
+                        } catch (XL2FPCore.InvalidExpressionException)
                         {
                             return null;
                         }
@@ -208,8 +209,11 @@ namespace ExcelFormulaExtractor
             // get inlined AST
             var ast = inlineExpression(addr, graph);
 
-            // convert AST back to expression
-            var f_in = ast.ToFormula;
+            // convert to FPCore
+            var fpc = XL2FPCore.FormulaToFPCore(ast);
+
+            // stringify FPCore
+            var f_in = fpc.ToExpr(0);
 
             // print
             System.Windows.Forms.MessageBox.Show("cell: " + addr.A1Local() + "\n\n" + f + "\n\nconverted to\n\n" + f_in);
