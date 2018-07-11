@@ -9,6 +9,7 @@ using Workbook = Microsoft.Office.Interop.Excel.Workbook;
 using PreList = System.Collections.Generic.List<System.Collections.Generic.Dictionary<AST.Address, double>>;
 using Vector = ExceLint.Vector.Vector;
 using Countable = ExceLint.Countable;
+using FPCoreOption = Microsoft.FSharp.Core.FSharpOption<FPCoreAST.FPCore>;
 
 namespace ExcelFormulaExtractor
 {
@@ -57,28 +58,72 @@ namespace ExcelFormulaExtractor
             return sb.ToString();
         }
 
-        private Dictionary<AST.Address, string> getAllFormulas(Depends.DAG graph)
+        private Dictionary<AST.Address, string> getAllFormulas(Depends.DAG graph, bool showProgress)
         {
-            return
-                graph
-                .getAllFormulaAddrs()
-                .Select(addr =>
-                    new Tuple<AST.Address, string>(addr, graph.getFormulaAtAddress(addr))
-                ).ToDictionary(tup => tup.Item1, tup => tup.Item2);
+            var frms = graph.getAllFormulaAddrs();
+
+            if (showProgress)
+            {
+                Progress p = new Progress("Marshaling", frms.Length);
+                p.Show();
+                p.Refresh();
+
+                var d =
+                frms
+                .Select(addr => {
+                    p.increment();
+                    return new Tuple<AST.Address, string>(addr, graph.getFormulaAtAddress(addr));
+                }).ToDictionary(tup => tup.Item1, tup => tup.Item2);
+
+                p.Hide();
+                
+                return d;
+            } else
+            {
+                return
+                frms
+                .Select(addr => {
+                    return new Tuple<AST.Address, string>(addr, graph.getFormulaAtAddress(addr));
+                }).ToDictionary(tup => tup.Item1, tup => tup.Item2);
+            }
+
+            
         }
 
         private Dictionary<AST.Address, ExpressionTools.FExpression> inlineFormulas(
                 Dictionary<AST.Address,string> formulas,
-                Depends.DAG graph
+                Depends.DAG graph,
+                bool showProgress
             )
         {
-            return
+            if (showProgress)
+            {
+                var p = new Progress("Inline", formulas.Count);
+                p.Show();
+                p.Refresh();
+
+                var d =
                 formulas
-                .Select(kvp => 
+                .Select(kvp => {
+                    p.increment();
+                    return new Tuple<AST.Address, ExpressionTools.FExpression>(kvp.Key, inlineExpression(kvp.Key, graph));
+                })
+                .Where(e => e != null)
+                .ToDictionary(tup => tup.Item1, tup => tup.Item2);
+
+                p.Hide();
+
+                return d;
+            } else
+            {
+                return
+                formulas
+                .Select(kvp =>
                     new Tuple<AST.Address, ExpressionTools.FExpression>(kvp.Key, inlineExpression(kvp.Key, graph))
                 )
                 .Where(e => e != null)
                 .ToDictionary(tup => tup.Item1, tup => tup.Item2);
+            }
         }
 
         private void toCSV(string[][] table)
@@ -141,12 +186,21 @@ namespace ExcelFormulaExtractor
                     .ToDictionary(tup => tup.Item1, tup => tup.Item2);
         }
 
-        private Dictionary<List<AST.Address>, FPCoreAST.FPCore> convertFormulaGroups(
+        private Dictionary<List<AST.Address>, FPCoreOption> convertFormulaGroups(
             Dictionary<Countable, List<AST.Address>> grps,
             Dictionary<AST.Address, ExpressionTools.FExpression> fexprs,
-            Depends.DAG graph)
+            Depends.DAG graph,
+            bool showProgress)
         {
-            var d = new Dictionary<List<AST.Address>, FPCoreAST.FPCore>();
+            var d = new Dictionary<List<AST.Address>, FPCoreOption>();
+
+            Progress p = null;
+            if (showProgress)
+            {
+                p = new Progress("Convert", grps.Count);
+                p.Show();
+                p.Refresh();
+            }
 
             foreach(var grp in grps)
             {
@@ -157,9 +211,29 @@ namespace ExcelFormulaExtractor
                 {
                     data.Add(fexprs[f].Data);
                 }
-                var ast = graph.getASTofFormulaAt(formulas.First());
-                var fpexpr = XL2FPCore.FormulaToFPCore(ast, data);
-                d.Add(formulas, fpexpr);
+
+                Func<FPCoreAST.FPCore> convert = () =>
+                {
+                    var ast = graph.getASTofFormulaAt(formulas.First());
+                    return XL2FPCore.FormulaToFPCore(ast, data);
+                };
+
+                try
+                {
+                    if (showProgress)
+                    {
+                        p.increment();
+                    }
+                    d.Add(formulas, FPCoreOption.Some(convert()));
+                } catch(Exception e)
+                {
+                    d.Add(formulas, FPCoreOption.None);
+                }
+            }
+
+            if (showProgress)
+            {
+                p.Hide();
             }
 
             return d;
@@ -168,7 +242,7 @@ namespace ExcelFormulaExtractor
         private string[][] coresToTable(
             Dictionary<AST.Address, string> formulas,
             Dictionary<AST.Address, ExpressionTools.FExpression> exprs,
-            Dictionary<List<AST.Address>, FPCoreAST.FPCore> cores)
+            Dictionary<List<AST.Address>, FPCoreOption> cores)
         {
             var cores_arr = cores.ToArray();
 
@@ -190,8 +264,13 @@ namespace ExcelFormulaExtractor
                     var addrs = cores_arr[i - 1].Key;
                     output[i][0] = String.Join("; ", addrs.Select(addr => addr.A1Local()));
                     output[i][1] = String.Join("; ", addrs.Select(addr => formulas[addr]));
-                    //output[i][2] = String.Join("; ", addrs.Select(addr => exprs[addr].Expression.ToFormula));
-                    output[i][2] = cores[addrs].ToExpr(0);
+                    if (FPCoreOption.get_IsSome(cores[addrs]))
+                    {
+                        output[i][2] = cores[addrs].Value.ToExpr(0);
+                    } else
+                    {
+                        output[i][2] = "No conversion available for this formula.";
+                    }
                 }
             }
 
@@ -233,11 +312,30 @@ namespace ExcelFormulaExtractor
             System.Windows.Forms.MessageBox.Show("cell: " + addr.A1Local() + "\n\n" + f + "\n\nconverted to\n\n" + f_in);
         }
 
-        private Dictionary<Countable, List<AST.Address>> groupFormulasByVector(Dictionary<AST.Address,string> addrs, Depends.DAG graph)
+        private Dictionary<Countable, List<AST.Address>> groupFormulasByVector(Dictionary<AST.Address,string> addrs, Depends.DAG graph, bool showProgress)
         {
-            var vs = addrs
+            Dictionary<AST.Address, Countable> vs;
+            if (showProgress)
+            {
+                var p = new Progress("Group", addrs.Count);
+                p.Show();
+                p.Refresh();
+
+                vs = addrs
+                .Select(kvp => {
+                    p.increment();
+                    return new Tuple<AST.Address, Countable>(kvp.Key, Vector.run(kvp.Key, graph).ToCVectorResultant);
+                })
+                .ToDictionary(tup => tup.Item1, tup => tup.Item2);
+
+                p.Hide();
+            } else
+            {
+                vs = addrs
                 .Select(kvp => new Tuple<AST.Address, Countable>(kvp.Key, Vector.run(kvp.Key, graph).ToCVectorResultant))
                 .ToDictionary(tup => tup.Item1, tup => tup.Item2);
+            }
+            
 
             var grps = vs.GroupBy(kvp => kvp.Value);
 
@@ -262,25 +360,61 @@ namespace ExcelFormulaExtractor
             var graph = new Depends.DAG(getWorkbook(), getApp(), ignore_parse_errors: false, dagBuilt: new DateTime());
 
             // get all formulas
-            var formulas = getAllFormulas(graph);
+            var formulas = getAllFormulas(graph, showProgress: true);
 
             // get inlined ASTs
-            var fexprs = inlineFormulas(formulas, graph);
-
-            // convert to FPCore
-            //var fpcores = convertFormulas(fexprs);
+            var fexprs = inlineFormulas(formulas, graph, showProgress: true);
 
             // which formulas are the same?
-            var fgrps = groupFormulasByVector(formulas, graph);
+            var fgrps = groupFormulasByVector(formulas, graph, showProgress: true);
 
             // for each group, generate a single formula with a bunch of preconditions
-            var fpcores = convertFormulaGroups(fgrps, fexprs, graph);
+            var fpcores = convertFormulaGroups(fgrps, fexprs, graph, showProgress: true);
 
             // get outputs as table
             var table = coresToTable(formulas, fexprs, fpcores);
 
             // prompt user to save as CSV
             toCSV(table);
+        }
+
+        private void checkForUnsupportedFormulas_Click(object sender, RibbonControlEventArgs e)
+        {
+            // get dependence graph
+            var graph = new Depends.DAG(getWorkbook(), getApp(), ignore_parse_errors: false, dagBuilt: new DateTime());
+
+            // get all formulas
+            var formulas = getAllFormulas(graph, showProgress: true);
+
+            // get inlined ASTs
+            var fexprs = inlineFormulas(formulas, graph, showProgress: true);
+
+            // which formulas are the same?
+            var fgrps = groupFormulasByVector(formulas, graph, showProgress: true);
+
+            // for each group, generate a single formula with a bunch of preconditions
+            var fpcores = convertFormulaGroups(fgrps, fexprs, graph, showProgress: true);
+
+            // find all of the formulas that convert to None
+            var failures = fpcores.Where(kvp => FPCoreOption.get_IsNone(kvp.Value));
+
+            // display on screen
+            if (failures.Count() == 0)
+            {
+                System.Windows.Forms.MessageBox.Show("All " + formulas.Count() + " formulas are supported.");
+            } else
+            {
+                // convert formulas to string
+                var msg = String.Join("\n", failures.Select(kvp => {
+                    var addr = kvp.Key.First();
+                    var form = graph.getFormulaAtAddress(addr);
+                    var a1local = addr.A1Local();
+                    string output = a1local + ": " + form;
+                    return output;
+                }));
+
+                System.Windows.Forms.MessageBox.Show(msg);
+            }
         }
     }
 }
