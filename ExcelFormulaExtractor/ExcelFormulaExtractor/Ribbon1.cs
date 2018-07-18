@@ -10,6 +10,8 @@ using PreList = System.Collections.Generic.List<System.Collections.Generic.Dicti
 using Vector = ExceLint.Vector.Vector;
 using Countable = ExceLint.Countable;
 using FPCoreOption = Microsoft.FSharp.Core.FSharpOption<FPCoreAST.FPCore>;
+using MemoDBO = System.Collections.Generic.Dictionary<AST.Address, System.Tuple<AST.Expression, Microsoft.FSharp.Collections.FSharpMap<AST.Address, double>>>;
+using MemoDBOpt = Microsoft.FSharp.Core.FSharpOption<System.Collections.Generic.Dictionary<AST.Address, System.Tuple<AST.Expression, Microsoft.FSharp.Collections.FSharpMap<AST.Address, double>>>>;
 
 namespace ExcelFormulaExtractor
 {
@@ -71,8 +73,9 @@ namespace ExcelFormulaExtractor
                 var d =
                 frms
                 .Select(addr => {
+                    var t = new Tuple<AST.Address, string>(addr, graph.getFormulaAtAddress(addr));
                     p.increment();
-                    return new Tuple<AST.Address, string>(addr, graph.getFormulaAtAddress(addr));
+                    return t;
                 }).ToDictionary(tup => tup.Item1, tup => tup.Item2);
 
                 p.Hide();
@@ -90,12 +93,16 @@ namespace ExcelFormulaExtractor
             
         }
 
-        private Dictionary<AST.Address, ExpressionTools.FExpression> inlineFormulas(
+        private Dictionary<AST.Address, ExpressionTools.EData> inlineFormulas(
                 Dictionary<AST.Address,string> formulas,
                 Depends.DAG graph,
+                MemoDBOpt memodb,
                 bool showProgress
             )
         {
+            var fnmemo = new Dictionary<AST.Address, ExpressionTools.EData>();
+
+
             if (showProgress)
             {
                 var p = new Progress("Inline", formulas.Count);
@@ -106,7 +113,7 @@ namespace ExcelFormulaExtractor
                 formulas
                 .Select(kvp => {
                     p.increment();
-                    return new Tuple<AST.Address, ExpressionTools.FExpression>(kvp.Key, inlineExpression(kvp.Key, graph));
+                    return new Tuple<AST.Address, ExpressionTools.EData>(kvp.Key, inlineExpression(kvp.Key, graph, memodb));
                 })
                 .Where(e => e != null)
                 .ToDictionary(tup => tup.Item1, tup => tup.Item2);
@@ -119,7 +126,7 @@ namespace ExcelFormulaExtractor
                 return
                 formulas
                 .Select(kvp =>
-                    new Tuple<AST.Address, ExpressionTools.FExpression>(kvp.Key, inlineExpression(kvp.Key, graph))
+                    new Tuple<AST.Address, ExpressionTools.EData>(kvp.Key, inlineExpression(kvp.Key, graph, memodb))
                 )
                 .Where(e => e != null)
                 .ToDictionary(tup => tup.Item1, tup => tup.Item2);
@@ -156,13 +163,13 @@ namespace ExcelFormulaExtractor
             f.Close();
         }
 
-        private ExpressionTools.FExpression inlineExpression(AST.Address addr, Depends.DAG graph)
+        private ExpressionTools.EData inlineExpression(AST.Address addr, Depends.DAG graph, MemoDBOpt memodb)
         {
             // get top-level AST
             var ast = graph.getASTofFormulaAt(addr);
 
             // merge subtrees
-            return ExpressionTools.flattenExpression(ast, graph);
+            return ExpressionTools.flattenExpression(ast, graph, memodb);
         }
 
         private Dictionary<AST.Address, FPCoreAST.FPCore> convertFormulas(Dictionary<AST.Address, ExpressionTools.FExpression> fexprs)
@@ -188,7 +195,7 @@ namespace ExcelFormulaExtractor
 
         private Dictionary<List<AST.Address>, FPCoreOption> convertFormulaGroups(
             Dictionary<Countable, List<AST.Address>> grps,
-            Dictionary<AST.Address, ExpressionTools.FExpression> fexprs,
+            Dictionary<AST.Address, ExpressionTools.EData> fexprs,
             Depends.DAG graph,
             bool showProgress)
         {
@@ -241,7 +248,7 @@ namespace ExcelFormulaExtractor
 
         private string[][] coresToTable(
             Dictionary<AST.Address, string> formulas,
-            Dictionary<AST.Address, ExpressionTools.FExpression> exprs,
+            Dictionary<AST.Address, ExpressionTools.EData> exprs,
             Dictionary<List<AST.Address>, FPCoreOption> cores)
         {
             var cores_arr = cores.ToArray();
@@ -296,7 +303,7 @@ namespace ExcelFormulaExtractor
             var f = graph.getFormulaAtAddress(addr);
 
             // get inlined AST
-            var fexpr = inlineExpression(addr, graph);
+            var fexpr = inlineExpression(addr, graph, MemoDBOpt.None);
 
             // init list
             var prelist = new PreList();
@@ -356,6 +363,9 @@ namespace ExcelFormulaExtractor
 
         private void ExtractToFPCore_Click(object sender, RibbonControlEventArgs e)
         {
+            // init MemoDB
+            var memodb = MemoDBOpt.Some(new MemoDBO());
+
             // get dependence graph
             var graph = new Depends.DAG(getWorkbook(), getApp(), ignore_parse_errors: false, dagBuilt: new DateTime());
 
@@ -363,7 +373,7 @@ namespace ExcelFormulaExtractor
             var formulas = getAllFormulas(graph, showProgress: true);
 
             // get inlined ASTs
-            var fexprs = inlineFormulas(formulas, graph, showProgress: true);
+            var fexprs = inlineFormulas(formulas, graph, memodb, showProgress: true);
 
             // which formulas are the same?
             var fgrps = groupFormulasByVector(formulas, graph, showProgress: true);
@@ -380,6 +390,9 @@ namespace ExcelFormulaExtractor
 
         private void checkForUnsupportedFormulas_Click(object sender, RibbonControlEventArgs e)
         {
+            // init MemoDB
+            var memodb = MemoDBOpt.Some(new MemoDBO());
+
             // get dependence graph
             var graph = new Depends.DAG(getWorkbook(), getApp(), ignore_parse_errors: false, dagBuilt: new DateTime());
 
@@ -387,7 +400,7 @@ namespace ExcelFormulaExtractor
             var formulas = getAllFormulas(graph, showProgress: true);
 
             // get inlined ASTs
-            var fexprs = inlineFormulas(formulas, graph, showProgress: true);
+            var fexprs = inlineFormulas(formulas, graph, memodb, showProgress: true);
 
             // which formulas are the same?
             var fgrps = groupFormulasByVector(formulas, graph, showProgress: true);
@@ -401,7 +414,9 @@ namespace ExcelFormulaExtractor
             // display on screen
             if (failures.Count() == 0)
             {
-                System.Windows.Forms.MessageBox.Show("All " + formulas.Count() + " formulas are supported.");
+                System.Windows.Forms.MessageBox.Show(
+                    "All " + formulas.Count() + " formulas are supported."
+                    + "\ncache hits: " + fexprs.Select(kvp => kvp.Value.CacheHits).Sum());
             } else
             {
                 // convert formulas to string
@@ -411,7 +426,7 @@ namespace ExcelFormulaExtractor
                     var a1local = addr.A1Local();
                     string output = a1local + ": " + form;
                     return output;
-                }));
+                })) + "\ncache hits: " + fexprs.Select(kvp => kvp.Value.CacheHits).Sum();
 
                 System.Windows.Forms.MessageBox.Show(msg);
             }
