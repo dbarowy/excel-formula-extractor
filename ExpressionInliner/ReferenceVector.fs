@@ -476,11 +476,11 @@
             inherit BaseFeature()
             static member run(cell: AST.Address)(dag: DAG) : Countable =
                 let isMixed = true
-                let isTransitive = false
+                let isTransitive = true
                 let isFormula = true
                 let isOffSheetInsensitive = true
                 let includeConstant = true
-                let includeLoc = true
+                let includeLoc = false
                 let keepConstantValues = KeepConstantValue.No
                 let rebase_f = relativeToTail
                 let constant_f = makeConstantVectorsFromConstants keepConstantValues

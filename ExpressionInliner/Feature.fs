@@ -139,6 +139,7 @@
         member self.ToCVectorResultant : Countable =
             match self with
             | FullCVectorResultant(x,y,z,dx,dy,dz,dc) -> CVectorResultant(dx,dy,dz,dc)
+            | CVectorResultant(_,_,_,_) -> self
             | _ -> failwith "Unsupported conversion."
         member self.ToLocationVector : Countable =
             match self with

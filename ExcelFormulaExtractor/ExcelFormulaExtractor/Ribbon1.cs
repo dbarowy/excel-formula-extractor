@@ -333,7 +333,7 @@ namespace ExcelFormulaExtractor
                 vs = addrs
                 .Select(kvp => {
                     p.increment();
-                    return new Tuple<AST.Address, Countable>(kvp.Key, Vector.run(kvp.Key, graph).ToCVectorResultant);
+                    return new Tuple<AST.Address, Countable>(kvp.Key, Vector.run(kvp.Key, graph));
                 })
                 .ToDictionary(tup => tup.Item1, tup => tup.Item2);
 
@@ -341,7 +341,7 @@ namespace ExcelFormulaExtractor
             } else
             {
                 vs = addrs
-                .Select(kvp => new Tuple<AST.Address, Countable>(kvp.Key, Vector.run(kvp.Key, graph).ToCVectorResultant))
+                .Select(kvp => new Tuple<AST.Address, Countable>(kvp.Key, Vector.run(kvp.Key, graph)))
                 .ToDictionary(tup => tup.Item1, tup => tup.Item2);
             }
             
