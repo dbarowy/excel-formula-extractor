@@ -136,31 +136,33 @@ namespace ExcelFormulaExtractor
         private void toCSV(string[][] table)
         {
             var sfd = new System.Windows.Forms.SaveFileDialog();
-            sfd.ShowDialog();
-            var f = sfd.OpenFile();
-            for (int r = 0; r < table.Length; r++)
+            if (sfd.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
-                var sb = new StringBuilder();
-                for (int c = 0; c < table[r].Length; c++)
+                var f = sfd.OpenFile();
+                for (int r = 0; r < table.Length; r++)
                 {
-                    string cell = table[r][c];
-                    sb.Append("\"");
-                    sb.Append(cell);
-                    sb.Append("\"");
-                    if (c < table[r].Length - 1)
+                    var sb = new StringBuilder();
+                    for (int c = 0; c < table[r].Length; c++)
                     {
-                        sb.Append(",");
+                        string cell = table[r][c];
+                        sb.Append("\"");
+                        sb.Append(cell);
+                        sb.Append("\"");
+                        if (c < table[r].Length - 1)
+                        {
+                            sb.Append(",");
+                        }
+                        else
+                        {
+                            sb.Append("\n");
+                        }
                     }
-                    else
-                    {
-                        sb.Append("\n");
-                    }
+                    var b = Encoding.ASCII.GetBytes(sb.ToString());
+                    f.Write(b, 0, b.Length);
                 }
-                var b = Encoding.ASCII.GetBytes(sb.ToString());
-                f.Write(b, 0, b.Length);
-            }
 
-            f.Close();
+                f.Close();
+            }
         }
 
         private ExpressionTools.EData inlineExpression(AST.Address addr, Depends.DAG graph, MemoDBOpt memodb)
