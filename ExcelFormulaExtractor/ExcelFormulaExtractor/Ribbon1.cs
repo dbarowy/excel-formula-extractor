@@ -195,6 +195,15 @@ namespace ExcelFormulaExtractor
                     .ToDictionary(tup => tup.Item1, tup => tup.Item2);
         }
 
+        private Dictionary<List<AST.Address>, FPCoreOption> newConvertFormulaGroups(
+            Dictionary<Countable, List<AST.Address>> grps,
+            Dictionary<AST.Address, ExpressionTools.EData> fexprs,
+            Depends.DAG graph,
+            bool showProgress)
+        {
+            throw new Exception("heh");
+        }
+
         private Dictionary<List<AST.Address>, FPCoreOption> convertFormulaGroups(
             Dictionary<Countable, List<AST.Address>> grps,
             Dictionary<AST.Address, ExpressionTools.EData> fexprs,
@@ -211,7 +220,7 @@ namespace ExcelFormulaExtractor
                 p.Refresh();
             }
 
-            foreach(var grp in grps)
+            foreach (var grp in grps)
             {
                 var vector = grp.Key;
                 var formulas = grp.Value;
@@ -234,7 +243,8 @@ namespace ExcelFormulaExtractor
                         p.increment();
                     }
                     d.Add(formulas, FPCoreOption.Some(convert()));
-                } catch(Exception e)
+                }
+                catch (Exception e)
                 {
                     d.Add(formulas, FPCoreOption.None);
                 }
@@ -432,6 +442,60 @@ namespace ExcelFormulaExtractor
 
                 System.Windows.Forms.MessageBox.Show(msg);
             }
+        }
+
+        private void extractTest_Click(object sender, RibbonControlEventArgs e)
+        {
+            // get dependence graph
+            var graph = new Depends.DAG(getWorkbook(), getApp(), ignore_parse_errors: false, dagBuilt: new DateTime());
+
+            // get all formulas
+            var formulas = getAllFormulas(graph, showProgress: true);
+
+            // group formulas by resultant and then group references by vector
+            var d = new Dictionary<Countable, Dictionary<Countable,List<AST.Address>>>();
+            foreach (var f in formulas)
+            {
+                var addr = f.Key;
+
+                // return all references
+                var refs = ExpressionTools.transitiveRefs(addr, graph);
+
+                // get vector for each reference
+                var vs = refs.Select(r =>
+                        new Tuple<Countable, AST.Address>(
+                            ExceLint.Vector.RelativeVector(r.Head, r.Tail, graph),
+                            r.Head
+                        )
+                    );
+
+                // compute resultant
+                var res = Vector.run(addr, graph);
+
+                if (!d.ContainsKey(res))
+                {
+                    var d_inner = new Dictionary<Countable, List<AST.Address>>();
+                    d.Add(res, d_inner);
+                }
+
+                // add to group dict
+                foreach(var pair in vs)
+                {
+                    var vector = pair.Item1;
+                    var head = pair.Item2;
+
+                    if (!d[res].ContainsKey(vector))
+                    {
+                        var xs = new List<AST.Address>();
+                        d[res].Add(vector, xs);
+                    }
+                    d[res][vector].Add(head);
+                }
+            }
+
+            // print
+            System.Windows.Forms.MessageBox.Show(String.Join<ExpressionTools.Vector>("\n", refs));
+
         }
     }
 }

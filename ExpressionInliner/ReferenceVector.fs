@@ -472,6 +472,23 @@
                    )
             countable
 
+        let RelativeVector(head: AST.Address)(tail: AST.Address)(dag: DAG) : Countable =
+            // vector params
+            let isMixed = true
+            let isOffSheetInsensitive = true
+            let includeConstant = true
+            let includeLoc = false
+            // get vector
+            let v = (makeVector isMixed includeConstant) tail head
+            // make relative to tail
+            let rv = relativeToTail v dag isOffSheetInsensitive includeLoc
+            // return as Countable
+            match rv with
+            | Constant(x,y,z,c) -> CVectorResultant(double x, double y, double z, double c)
+            | NoConstant(x,y,z) -> Vector(double x, double y, double z)
+            | ConstantWithLoc(x,y,z,dx,dy,dz,dc) -> FullCVectorResultant(double x, double y, double z, double dx, double dy, double dz, double dc)
+            | NoConstantWithLoc(x,y,z,dx,dy,dz) -> Countable.SquareVector(double dx, double dy, double dz, double x, double y, double z)
+
         type Vector() =
             inherit BaseFeature()
             static member run(cell: AST.Address)(dag: DAG) : Countable =

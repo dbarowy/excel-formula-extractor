@@ -39,6 +39,7 @@
             this.ExtractThis = this.Factory.CreateRibbonButton();
             this.ExtractToFPCore = this.Factory.CreateRibbonButton();
             this.checkForUnsupportedFormulas = this.Factory.CreateRibbonButton();
+            this.extractTest = this.Factory.CreateRibbonButton();
             this.tab1.SuspendLayout();
             this.group1.SuspendLayout();
             this.SuspendLayout();
@@ -55,6 +56,7 @@
             this.group1.Items.Add(this.ExtractThis);
             this.group1.Items.Add(this.ExtractToFPCore);
             this.group1.Items.Add(this.checkForUnsupportedFormulas);
+            this.group1.Items.Add(this.extractTest);
             this.group1.Label = "group1";
             this.group1.Name = "group1";
             // 
@@ -75,6 +77,12 @@
             this.checkForUnsupportedFormulas.Label = "Check for Unsupported Formulas";
             this.checkForUnsupportedFormulas.Name = "checkForUnsupportedFormulas";
             this.checkForUnsupportedFormulas.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.checkForUnsupportedFormulas_Click);
+            // 
+            // extractTest
+            // 
+            this.extractTest.Label = "Test";
+            this.extractTest.Name = "extractTest";
+            this.extractTest.Click += new Microsoft.Office.Tools.Ribbon.RibbonControlEventHandler(this.extractTest_Click);
             // 
             // Ribbon1
             // 
@@ -97,6 +105,7 @@
         internal Microsoft.Office.Tools.Ribbon.RibbonButton ExtractThis;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton ExtractToFPCore;
         internal Microsoft.Office.Tools.Ribbon.RibbonButton checkForUnsupportedFormulas;
+        internal Microsoft.Office.Tools.Ribbon.RibbonButton extractTest;
     }
 
     partial class ThisRibbonCollection

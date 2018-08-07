@@ -22,6 +22,12 @@ type EData(fexpr: FExpression, cache_hits: int) =
     member self.Data = fexpr.Data
     member self.CacheHits = cache_hits
 
+type Vector(tail: AST.Address, head: AST.Address) =
+    member self.Tail = tail
+    member self.Head = head
+    override self.ToString() =
+        tail.ToString() + " -> " + head.ToString()
+
 // first element: the converted expression
 // second element: the set of references closed over in the expression
 // third element: cache hits
@@ -125,3 +131,34 @@ let flattenExpression(expr: AST.Expression)(graph: DAG)(dbo: MemoDB option) : ED
     let (expr, var), ch = flattenedExpression expr graph dbo
     let d = Map.toSeq var |> adict
     EData(FExpression(expr, d),ch)
+
+let rec transitiveRefs(addr: AST.Address)(graph: DAG) : Vector[] =
+    let expr = graph.getASTofFormulaAt addr
+    let addrs = Parcel.addrReferencesFromExpr expr |> Array.map (fun a -> Vector(addr, a))
+    let rngs = Parcel.rangeReferencesFromExpr expr
+    let addrs' =
+        Array.concat
+            [
+                addrs;
+                (rngs
+                 |> Array.map (fun rng ->
+                    rng.Addresses()
+                    |> Array.map (fun a ->
+                        Vector(addr, a)
+                       )
+                    )
+                 |> Array.concat)
+            ]
+            |> Array.distinct
+    let follow =
+        addrs'
+        |> Array.map (fun v ->
+            if graph.isFormula v.Head then
+                Some (transitiveRefs v.Head graph)
+            else
+                None
+           )
+        |> Array.choose id
+        |> Array.concat
+    Array.concat [addrs'; follow]
+    
