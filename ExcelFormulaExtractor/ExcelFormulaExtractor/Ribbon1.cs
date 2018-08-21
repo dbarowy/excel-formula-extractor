@@ -449,7 +449,6 @@ namespace ExcelFormulaExtractor
 
         private void extractTest_Click(object sender, RibbonControlEventArgs e)
         {
-            //var functions = new Dictionary<Fingerprint, List<Source>>();
             var invocations = new Dictionary<Fingerprint, List<ExpressionTools.Vector[]>>();
             var refvars = new Dictionary<Fingerprint, Dictionary<Countable, string>>();
 
@@ -470,13 +469,8 @@ namespace ExcelFormulaExtractor
                 // return all references
                 var refs = ExpressionTools.transitiveRefs(addr, graph);
 
-                // compute resultant & save formula address to correct 'function' bin
+                // compute resultant
                 var res = Vector.run(addr, graph);
-                //if (!functions.ContainsKey(res))
-                //{
-                //    functions.Add(res, new List<AST.Address>());
-                //}
-                //functions[res].Add(f.Key);
 
                 // save each 'invocation'
                 if (!invocations.ContainsKey(res))
@@ -548,7 +542,24 @@ namespace ExcelFormulaExtractor
                 // convert an arbitrary instance of this 'function'
                 try
                 {
-                    var fpcore = XL2FPCore.FormulaToFPCore(edatas.First().Value.Expression, prelist);
+                    // get invocations for this function
+                    var f_invocations = invocations[fingerprint];
+                    var invocation = f_invocations.First();
+                    var faddr = invocation.First().Tail;
+
+                    // get bindings for this invocation
+                    var bindings = new Dictionary<AST.Address, string>();
+                    foreach (var vectref in invocation)
+                    {
+                        var ref_resultant = ExceLint.Vector.RelativeVector(vectref.Head, vectref.Tail, graph);
+                        var variable = refvars[fingerprint][ref_resultant];
+                        if (!bindings.ContainsKey(vectref.Head))
+                        {
+                            bindings.Add(vectref.Head, variable);
+                        }
+                    }
+
+                    var fpcore = XL2FPCore.FormulaToFPCore(edatas[faddr].Expression, prelist, bindings);
                     System.Windows.Forms.MessageBox.Show(fpcore.ToExpr(0));
                 } catch (XL2FPCore.InvalidExpressionException)
                 {
