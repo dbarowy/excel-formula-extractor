@@ -132,33 +132,35 @@ let flattenExpression(expr: AST.Expression)(graph: DAG)(dbo: MemoDB option) : ED
     let d = Map.toSeq var |> adict
     EData(FExpression(expr, d),ch)
 
-let rec transitiveRefs(addr: AST.Address)(graph: DAG) : Vector[] =
-    let expr = graph.getASTofFormulaAt addr
-    let addrs = Parcel.addrReferencesFromExpr expr |> Array.map (fun a -> Vector(addr, a))
-    let rngs = Parcel.rangeReferencesFromExpr expr
-    let addrs' =
-        Array.concat
-            [
-                addrs;
-                (rngs
-                 |> Array.map (fun rng ->
-                    rng.Addresses()
-                    |> Array.map (fun a ->
-                        Vector(addr, a)
-                       )
-                    )
-                 |> Array.concat)
-            ]
-            |> Array.distinct
-    let follow =
-        addrs'
-        |> Array.map (fun v ->
-            if graph.isFormula v.Head then
-                Some (transitiveRefs v.Head graph)
-            else
-                None
-           )
-        |> Array.choose id
-        |> Array.concat
-    Array.concat [addrs'; follow]
+let transitiveRefs(faddr: AST.Address)(graph: DAG) : Vector[] =
+    let rec tr(addr: AST.Address) =
+        let expr = graph.getASTofFormulaAt addr
+        let addrs = Parcel.addrReferencesFromExpr expr |> Array.map (fun a -> Vector(faddr, a))
+        let rngs = Parcel.rangeReferencesFromExpr expr
+        let addrs' =
+            Array.concat
+                [
+                    addrs;
+                    (rngs
+                     |> Array.map (fun rng ->
+                        rng.Addresses()
+                        |> Array.map (fun a ->
+                            Vector(faddr, a)
+                           )
+                        )
+                     |> Array.concat)
+                ]
+                |> Array.distinct
+        let follow =
+            addrs'
+            |> Array.map (fun v ->
+                if graph.isFormula v.Head then
+                    Some (tr v.Head)
+                else
+                    None
+               )
+            |> Array.choose id
+            |> Array.concat
+        Array.concat [addrs'; follow]
+    tr faddr
     

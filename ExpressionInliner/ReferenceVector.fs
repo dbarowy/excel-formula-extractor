@@ -336,10 +336,10 @@
                 let heads = ops |> List.map (fun op -> zeroArityXYP op tailPath c) |> List.choose id
                 heads |> List.map (fun head -> MixedFQVectorWithConstant(tailXYP, head))
 
-        let transitiveInputVectors(fCell: AST.Address)(dag : DAG)(depth: int option)(vector_f: VectorMaker)(cvector_f: ConstantVectorMaker) : RichVector[] =
+        let transitiveInputVectors(fCell: AST.Address)(dag : DAG)(depth: int option)(vector_f: VectorMaker)(cvector_f: ConstantVectorMaker)(tail_is_fcell: bool) : RichVector[] =
             let rec tfVect(tailO: AST.Address option)(head: AST.Address)(depth: int option) : RichVector list =
                 let vlist = match tailO with
-                            | Some tail -> [vector_f tail head]
+                            | Some tail -> if tail_is_fcell then [vector_f fCell head]  else [vector_f tail head]
                             | None -> []
 
                 match depth with
@@ -348,6 +348,8 @@
                 | None -> tfVect_b head None vlist
 
             and tfVect_b(tail: AST.Address)(nextDepth: int option)(vlist: RichVector list) : RichVector list =
+                let root = if tail_is_fcell then fCell else tail
+
                 if (dag.isFormula tail) then
                     try
                         // parse again, because the DAG treats repeated
@@ -365,11 +367,11 @@
                                                 List.concat
 
                         // find all constant inputs for source
-                        let cvects = cvector_f tail fexpr
+                        let cvects = cvector_f root fexpr
 
                         // Get references for zero-arity functions
                         let ops = Parcel.operatorNamesFromExpr fexpr
-                        let zvects = refsForArityZeroOps tail ops
+                        let zvects = refsForArityZeroOps root ops
 
                         let heads = heads_single @ heads_vector
                         // recursively call this function
@@ -390,35 +392,10 @@
                                -1.0  // pretty arbitrary... maybe we should have a "blank" dimension
                     let env = AST.Env(tail.Path, tail.WorkbookName, tail.WorksheetName)
                     let expr = AST.ReferenceExpr (AST.ReferenceConstant(env, num))
-                    let dv = cvector_f tail expr
+                    let dv = cvector_f root expr
                     dv @ vlist
-
     
             tfVect None fCell depth |> List.toArray
-
-        let transitiveOutputVectors(dCell: AST.Address)(dag : DAG)(depth: int option)(vector_f: VectorMaker)(cvector_f: ConstantVectorMaker) : RichVector[] =
-            let rec tdVect(sourceO: AST.Address option)(sink: AST.Address)(depth: int option) : RichVector list =
-                let vlist = match sourceO with
-                            | Some source -> [vector_f sink source]
-                            | None -> []
-
-                match depth with
-                | Some(0) -> vlist
-                | Some(d) -> tdVect_b sink (Some(d-1)) vlist
-                | None -> tdVect_b sink None vlist
-
-            and tdVect_b(sink: AST.Address)(nextDepth: int option)(vlist: RichVector list) : RichVector list =
-                    // find all of the formulas that use sink
-                    let outAddrs = dag.getFormulasThatRefCell sink
-                                    |> Array.toList
-                    let outAddrs2 = Array.map (dag.getFormulasThatRefVector) (dag.getVectorsThatRefCell sink)
-                                    |> Array.concat |> Array.toList
-                    let allFrm = outAddrs @ outAddrs2 |> List.distinct
-
-                    // recursively call this function
-                    vlist @ (List.map (fun sink' -> tdVect (Some sink) sink' nextDepth) allFrm |> List.concat)
-
-            tdVect None dCell depth |> List.toArray
 
         let private makeVector(isMixed: bool)(includeConstant: bool): VectorMaker =
             (fun (source: AST.Address)(sink: AST.Address) ->
@@ -452,13 +429,13 @@
                 vs
             )
 
-        let getVectors(cell: AST.Address)(dag: DAG)(vector_f: VectorMaker)(cvector_f: ConstantVectorMaker)(transitive: bool)(isForm: bool) : RichVector[] =
+        let getVectors(cell: AST.Address)(dag: DAG)(vector_f: VectorMaker)(cvector_f: ConstantVectorMaker)(transitive: bool)(isForm: bool)(tail_is_formula: bool) : RichVector[] =
             let depth = if transitive then None else (Some 1)
-            let output = transitiveInputVectors cell dag depth vector_f cvector_f
+            let output = transitiveInputVectors cell dag depth vector_f cvector_f tail_is_formula
             output
 
-        let ResultantMaker(cell: AST.Address)(dag: DAG)(isMixed: bool)(includeConstant: bool)(includeLoc: bool)(isTransitive: bool)(isFormula: bool)(isOffSheetInsensitive: bool)(constant_f: ConstantVectorMaker)(rebase_f: Rebaser) : Countable =
-            let vs = getVectors cell dag (makeVector isMixed includeConstant) constant_f isTransitive isFormula
+        let ResultantMaker(cell: AST.Address)(dag: DAG)(isMixed: bool)(includeConstant: bool)(includeLoc: bool)(isTransitive: bool)(isFormula: bool)(isOffSheetInsensitive: bool)(constant_f: ConstantVectorMaker)(rebase_f: Rebaser)(tail_is_formula: bool) : Countable =
+            let vs = getVectors cell dag (makeVector isMixed includeConstant) constant_f isTransitive isFormula tail_is_formula
             let rebased_vs = vs |> Array.map (fun v -> rebase_f v dag isOffSheetInsensitive includeLoc)
             let resultant = rebased_vs |> Resultant
             let countable =
@@ -496,12 +473,13 @@
                 let isTransitive = true
                 let isFormula = true
                 let isOffSheetInsensitive = true
+                let tailIsAlwaysSourceFormula = true
                 let includeConstant = true
                 let includeLoc = false
                 let keepConstantValues = KeepConstantValue.No
                 let rebase_f = relativeToTail
                 let constant_f = makeConstantVectorsFromConstants keepConstantValues
-                ResultantMaker cell dag isMixed includeConstant includeLoc isTransitive isFormula isOffSheetInsensitive constant_f rebase_f 
+                ResultantMaker cell dag isMixed includeConstant includeLoc isTransitive isFormula isOffSheetInsensitive constant_f rebase_f tailIsAlwaysSourceFormula
             static member capability : string*Capability =
                 (typeof<Vector>.Name,
                     { enabled = false; kind = ConfigKind.Feature; runner = Vector.run } )
