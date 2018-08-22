@@ -10,6 +10,7 @@ using Fingerprint = ExceLint.Countable;
 using Source = AST.Address;
 using Functions = System.Collections.Generic.Dictionary<ExceLint.Countable, System.Collections.Generic.List<ExpressionTools.Vector[]>>;
 using Variables = System.Collections.Generic.Dictionary<ExceLint.Countable, System.Collections.Generic.Dictionary<ExceLint.Countable, string>>;
+using Provenance = System.Collections.Generic.Dictionary<ExceLint.Countable, System.Collections.Generic.List<AST.Address>>;
 
 namespace ExtractionLogic
 {
@@ -17,11 +18,13 @@ namespace ExtractionLogic
     {
         private readonly Functions _functions;
         private readonly Variables _variables;
+        private readonly Provenance _provenance;
 
-        public Group(Functions f, Variables v)
+        public Group(Functions f, Variables v, Provenance p)
         {
             _functions = f;
             _variables = v;
+            _provenance = p;
         }
 
         public Functions Functions
@@ -32,6 +35,11 @@ namespace ExtractionLogic
         public Variables Variables
         {
             get { return _variables; }
+        }
+
+        public Provenance Provenance
+        {
+            get { return _provenance; }
         }
     }
 
@@ -91,13 +99,11 @@ namespace ExtractionLogic
             return fpcores;
         }
 
-
         private static Group groupFunctions(Depends.DAG graph, Dictionary<AST.Address, string> formulas)
         {
-            var invocations = new Dictionary<Fingerprint, List<ExpressionTools.Vector[]>>();
-            var refvars = new Dictionary<Fingerprint, Dictionary<Countable, string>>();
-
-            
+            var functions = new Functions();
+            var variables = new Variables();
+            var provenance = new Provenance();
 
             // group formulas and invocations by resultant
             foreach (var f in formulas)
@@ -110,32 +116,47 @@ namespace ExtractionLogic
                 // compute resultant
                 var res = Vector.run(addr, graph);
 
-                // save each 'invocation'
-                if (!invocations.ContainsKey(res))
+                // save each 'function'
+                if (!functions.ContainsKey(res))
                 {
-                    invocations.Add(res, new List<ExpressionTools.Vector[]>());
+                    functions.Add(res, new List<ExpressionTools.Vector[]>());
                 }
-                invocations[res].Add(refs);
+                functions[res].Add(refs);
 
                 // assign a fresh variable to each unique reference
-                if (!refvars.ContainsKey(res))
+                if (!variables.ContainsKey(res))
                 {
                     // never seen this function before
                     var vm = new VariableMaker();
-                    refvars.Add(res, new Dictionary<Countable, string>());
+                    variables.Add(res, new Dictionary<Countable, string>());
 
-                    foreach (var vectref in refs)
+                    // we only want unique path resultants for data
+                    var resultants =
+                        refs
+                            .Where(r => !graph.isFormula(r.Head))
+                            .Select(r => ExceLint.Vector.RelativeVector(r.Head, r.Tail, graph))
+                            .Distinct();
+
+                    // assign variable
+                    foreach (var r in resultants)
                     {
-                        var ref_resultant = ExceLint.Vector.RelativeVector(vectref.Head, vectref.Tail, graph);
-                        if (!refvars[res].ContainsKey(ref_resultant))
+                        if (!variables[res].ContainsKey(r))
                         {
-                            refvars[res].Add(ref_resultant, vm.nextVariable());
+                            variables[res].Add(r, vm.nextVariable());
                         }
                     }
                 }
+
+                // track provenance
+                if (!provenance.ContainsKey(res))
+                {
+                    var ps = new List<AST.Address>();
+                    provenance.Add(res, ps);
+                }
+                provenance[res].Add(addr);
             }
 
-            return new Group(invocations, refvars);
+            return new Group(functions, variables, provenance);
         }
 
         private static PreList makePreList(Group g, Fingerprint fingerprint, Dictionary<Source, ExpressionTools.EData> edatas, Depends.DAG graph)
@@ -148,23 +169,29 @@ namespace ExtractionLogic
                 foreach (var vectref in f_invocations)
                 {
                     var ref_resultant = ExceLint.Vector.RelativeVector(vectref.Head, vectref.Tail, graph);
-                    var variable = g.Variables[fingerprint][ref_resultant];
 
-                    // only bind values to variables if a reference refers
-                    // to data, not a formula
-                    if (edatas[vectref.Tail].Data.ContainsKey(vectref.Head))
+                    // not every vector gets a variable (e.g., vectors that point to functions);
+                    // if so, move on
+                    if (g.Variables[fingerprint].ContainsKey(ref_resultant))
                     {
-                        var value = edatas[vectref.Tail].Data[vectref.Head];
+                        var variable = g.Variables[fingerprint][ref_resultant];
 
-                        // have we already bound a variable to this value?
-                        if (bindings.ContainsKey(variable))
+                        // only bind values to variables if a reference refers
+                        // to data, not a formula
+                        if (edatas[vectref.Tail].Data.ContainsKey(vectref.Head))
                         {
-                            // it had better be the same value, dude
-                            System.Diagnostics.Debug.Assert(bindings[variable] == value);
-                            continue;
-                        }
+                            var value = edatas[vectref.Tail].Data[vectref.Head];
 
-                        bindings.Add(variable, value);
+                            // have we already bound a variable to this value?
+                            if (bindings.ContainsKey(variable))
+                            {
+                                // it had better be the same value, dude
+                                System.Diagnostics.Debug.Assert(bindings[variable] == value);
+                                continue;
+                            }
+
+                            bindings.Add(variable, value);
+                        }
                     }
                 }
                 prelist.Add(bindings);
@@ -189,14 +216,19 @@ namespace ExtractionLogic
             foreach (var vectref in invocation)
             {
                 var ref_resultant = ExceLint.Vector.RelativeVector(vectref.Head, vectref.Tail, graph);
-                var variable = g.Variables[fingerprint][ref_resultant];
-                if (!bindings.ContainsKey(vectref.Head))
+
+                // not every vector gets a variable (e.g., references to functions)
+                if (g.Variables[fingerprint].ContainsKey(ref_resultant))
                 {
-                    bindings.Add(vectref.Head, variable);
+                    var variable = g.Variables[fingerprint][ref_resultant];
+                    if (!bindings.ContainsKey(vectref.Head))
+                    {
+                        bindings.Add(vectref.Head, variable);
+                    }
                 }
             }
 
-            return XL2FPCore.FormulaToFPCore(edatas[faddr].Expression, prelist, bindings);
+            return XL2FPCore.FormulaToFPCore(edatas[faddr].Expression, prelist, bindings, g.Provenance[fingerprint].ToArray());
         }
     }
 }
