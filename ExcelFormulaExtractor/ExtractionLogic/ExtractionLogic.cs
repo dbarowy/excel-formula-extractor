@@ -63,8 +63,7 @@ namespace ExtractionLogic
             var g = groupFunctions(graph, formulas);
 
             // allocate return array
-            var fpcores = new string[g.Functions.Count];
-            int i = 0;
+            var fpcores = new List<string>();
 
             // produce a string for each fingerprinted 'function'
             foreach (var fkvp in g.Functions)
@@ -78,25 +77,30 @@ namespace ExtractionLogic
                     return new Tuple<Source, ExpressionTools.EData>(faddr, inlineExpression(faddr, graph, mdbo));
                 }).ToDictionary(kvp => kvp.Item1, kvp => kvp.Item2);
 
-                // generate prelist
-                var prelist = makePreList(g, fingerprint, edatas, graph);
+                PreList prelist = null;
+                try
+                {
+                    // generate prelist
+                    prelist = makePreList(g, fingerprint, edatas, graph);
+                } catch (Exception)
+                {
+                    // sometimes aliasing bugs pop up; if that happens, move on
+                    continue;
+                }
 
                 // convert an arbitrary instance of this 'function'
                 try
                 {
                     var fpcore = convertToFPCore(g, fingerprint, edatas, graph, prelist);
-                    fpcores[i] = fpcore.ToExpr(0);
+                    fpcores.Add(fpcore.ToExpr(0));
                 }
                 catch (Exception)
                 {
                     // we can't convert everything; give up
                 }
-
-                i++;
-
             }
 
-            return fpcores;
+            return fpcores.ToArray();
         }
 
         private static Group groupFunctions(Depends.DAG graph, Dictionary<AST.Address, string> formulas)
