@@ -186,8 +186,13 @@ namespace ExtractionLogic
                             if (bindings.ContainsKey(variable))
                             {
                                 // it had better be the same value, dude
-                                System.Diagnostics.Debug.Assert(bindings[variable] == value);
-                                continue;
+                                if (bindings[variable] != value)
+                                {
+                                    throw new Exception("Same reference bound to different value!");
+                                } else
+                                {
+                                    continue;
+                                }
                             }
 
                             bindings.Add(variable, value);
