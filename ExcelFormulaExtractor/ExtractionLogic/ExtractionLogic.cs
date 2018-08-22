@@ -87,7 +87,7 @@ namespace ExtractionLogic
                     var fpcore = convertToFPCore(g, fingerprint, edatas, graph, prelist);
                     fpcores[i] = fpcore.ToExpr(0);
                 }
-                catch (XL2FPCore.InvalidExpressionException)
+                catch (Exception)
                 {
                     // we can't convert everything; give up
                 }
