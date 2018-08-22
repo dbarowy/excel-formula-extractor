@@ -166,7 +166,6 @@
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="VariableMaker.cs" />
     <EmbeddedResource Include="Progress.resx">
       <DependentUpon>Progress.cs</DependentUpon>
     </EmbeddedResource>
@@ -240,6 +239,10 @@
     <ProjectReference Include="..\..\xl2fpcore\xl2fpcore\xl2fpcore.fsproj">
       <Project>{3811543e-4d53-44ff-8d85-7f9e9d68dd71}</Project>
       <Name>xl2fpcore</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ExtractionLogic\ExtractionLogic.csproj">
+      <Project>{9e744cc9-9925-4fa2-a376-7f1b29a99434}</Project>
+      <Name>ExtractionLogic</Name>
     </ProjectReference>
   </ItemGroup>
   <PropertyGroup>

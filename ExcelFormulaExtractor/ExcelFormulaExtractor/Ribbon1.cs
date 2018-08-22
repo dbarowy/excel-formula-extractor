@@ -3,18 +3,10 @@ using System.Linq;
 using System.Text;
 using Microsoft.Office.Tools.Ribbon;
 using System.Collections.Generic;
-using Excel = Microsoft.Office.Interop.Excel;
 using Application = Microsoft.Office.Interop.Excel.Application;
 using Workbook = Microsoft.Office.Interop.Excel.Workbook;
-using PreList = System.Collections.Generic.List<System.Collections.Generic.Dictionary<string, double>>;
-using Vector = ExceLint.Vector.Vector;
 using Countable = ExceLint.Countable;
 using FPCoreOption = Microsoft.FSharp.Core.FSharpOption<FPCoreAST.FPCore>;
-using MemoDBO = System.Collections.Generic.Dictionary<AST.Address, System.Tuple<AST.Expression, Microsoft.FSharp.Collections.FSharpMap<AST.Address, double>>>;
-using MemoDBOpt = Microsoft.FSharp.Core.FSharpOption<System.Collections.Generic.Dictionary<AST.Address, System.Tuple<AST.Expression, Microsoft.FSharp.Collections.FSharpMap<AST.Address, double>>>>;
-using Fingerprint = ExceLint.Countable;
-using Source = AST.Address;
-using Sink = AST.Address;
 
 namespace ExcelFormulaExtractor
 {
@@ -92,48 +84,6 @@ namespace ExcelFormulaExtractor
                     return new Tuple<AST.Address, string>(addr, graph.getFormulaAtAddress(addr));
                 }).ToDictionary(tup => tup.Item1, tup => tup.Item2);
             }
-
-            
-        }
-
-        private Dictionary<AST.Address, ExpressionTools.EData> inlineFormulas(
-                Dictionary<AST.Address,string> formulas,
-                Depends.DAG graph,
-                MemoDBOpt memodb,
-                bool showProgress
-            )
-        {
-            var fnmemo = new Dictionary<AST.Address, ExpressionTools.EData>();
-
-
-            if (showProgress)
-            {
-                var p = new Progress("Inline", formulas.Count);
-                p.Show();
-                p.Refresh();
-
-                var d =
-                formulas
-                .Select(kvp => {
-                    p.increment();
-                    return new Tuple<AST.Address, ExpressionTools.EData>(kvp.Key, inlineExpression(kvp.Key, graph, memodb));
-                })
-                .Where(e => e != null)
-                .ToDictionary(tup => tup.Item1, tup => tup.Item2);
-
-                p.Hide();
-
-                return d;
-            } else
-            {
-                return
-                formulas
-                .Select(kvp =>
-                    new Tuple<AST.Address, ExpressionTools.EData>(kvp.Key, inlineExpression(kvp.Key, graph, memodb))
-                )
-                .Where(e => e != null)
-                .ToDictionary(tup => tup.Item1, tup => tup.Item2);
-            }
         }
 
         private void toCSV(string[][] table)
@@ -168,36 +118,6 @@ namespace ExcelFormulaExtractor
             }
         }
 
-        private ExpressionTools.EData inlineExpression(AST.Address addr, Depends.DAG graph, MemoDBOpt memodb)
-        {
-            // get top-level AST
-            var ast = graph.getASTofFormulaAt(addr);
-
-            // merge subtrees
-            return ExpressionTools.flattenExpression(ast, graph, memodb);
-        }
-
-        //private Dictionary<AST.Address, FPCoreAST.FPCore> convertFormulas(Dictionary<AST.Address, ExpressionTools.FExpression> fexprs)
-        //{
-        //    return
-        //        fexprs
-        //            .Select(kvp => {
-        //                try
-        //                {
-        //                    var prelist = new PreList();
-        //                    prelist.Add(kvp.Value.Data);
-        //                    var fpc = XL2FPCore.FormulaToFPCore(kvp.Value.Expression, prelist);
-        //                    return new Tuple<AST.Address, FPCoreAST.FPCore>(kvp.Key, fpc);
-        //                } catch (XL2FPCore.InvalidExpressionException)
-        //                {
-        //                    return null;
-        //                }
-                        
-        //            })
-        //            .Where(e => e != null)
-        //            .ToDictionary(tup => tup.Item1, tup => tup.Item2);
-        //}
-
         private Dictionary<List<AST.Address>, FPCoreOption> newConvertFormulaGroups(
             Dictionary<Countable, List<AST.Address>> grps,
             Dictionary<AST.Address, ExpressionTools.EData> fexprs,
@@ -206,60 +126,6 @@ namespace ExcelFormulaExtractor
         {
             throw new Exception("heh");
         }
-
-        //private Dictionary<List<AST.Address>, FPCoreOption> convertFormulaGroups(
-        //    Dictionary<Countable, List<AST.Address>> grps,
-        //    Dictionary<AST.Address, ExpressionTools.EData> fexprs,
-        //    Depends.DAG graph,
-        //    bool showProgress)
-        //{
-        //    var d = new Dictionary<List<AST.Address>, FPCoreOption>();
-
-        //    Progress p = null;
-        //    if (showProgress)
-        //    {
-        //        p = new Progress("Convert", grps.Count);
-        //        p.Show();
-        //        p.Refresh();
-        //    }
-
-        //    foreach (var grp in grps)
-        //    {
-        //        var vector = grp.Key;
-        //        var formulas = grp.Value;
-        //        var data = new PreList();
-        //        foreach (var f in formulas)
-        //        {
-        //            data.Add(fexprs[f].Data);
-        //        }
-
-        //        Func<FPCoreAST.FPCore> convert = () =>
-        //        {
-        //            var ast = graph.getASTofFormulaAt(formulas.First());
-        //            return XL2FPCore.FormulaToFPCore(ast, data);
-        //        };
-
-        //        try
-        //        {
-        //            if (showProgress)
-        //            {
-        //                p.increment();
-        //            }
-        //            d.Add(formulas, FPCoreOption.Some(convert()));
-        //        }
-        //        catch (Exception e)
-        //        {
-        //            d.Add(formulas, FPCoreOption.None);
-        //        }
-        //    }
-
-        //    if (showProgress)
-        //    {
-        //        p.Hide();
-        //    }
-
-        //    return d;
-        //}
 
         private string[][] coresToTable(
             Dictionary<AST.Address, string> formulas,
@@ -301,272 +167,29 @@ namespace ExcelFormulaExtractor
 
         private void ExtractThis_Click(object sender, RibbonControlEventArgs e)
         {
-            //// get cursor location
-            //var cursor = (Excel.Range)Globals.ThisAddIn.Application.Selection;
-            //AST.Address addr = ParcelCOMShim.Address.AddressFromCOMObject(cursor, getWorkbook());
-
-            //// get dependence graph
-            //var graph = new Depends.DAG(getWorkbook(), getApp(), ignore_parse_errors: false, dagBuilt: new DateTime());
-
-            //if (!graph.isFormula(addr))
-            //{
-            //    System.Windows.Forms.MessageBox.Show("Selected cell is not a formula.");
-            //    return;
-            //}
-
-            //// get original expression
-            //var f = graph.getFormulaAtAddress(addr);
-
-            //// get inlined AST
-            //var fexpr = inlineExpression(addr, graph, MemoDBOpt.None);
-
-            //// init list
-            //var prelist = new PreList();
-            //prelist.Add(fexpr.Data);
-
-            //// convert to FPCore
-            //var fpc = XL2FPCore.FormulaToFPCore(fexpr.Expression, prelist);
-
-            //// stringify FPCore
-            //var f_in = fpc.ToExpr(0);
-
-            //// print
-            //System.Windows.Forms.MessageBox.Show("cell: " + addr.A1Local() + "\n\n" + f + "\n\nconverted to\n\n" + f_in);
-        }
-
-        private Dictionary<Countable, List<AST.Address>> groupFormulasByVector(Dictionary<AST.Address,string> addrs, Depends.DAG graph, bool showProgress)
-        {
-            Dictionary<AST.Address, Countable> vs;
-            if (showProgress)
-            {
-                var p = new Progress("Group", addrs.Count);
-                p.Show();
-                p.Refresh();
-
-                vs = addrs
-                .Select(kvp => {
-                    p.increment();
-                    return new Tuple<AST.Address, Countable>(kvp.Key, Vector.run(kvp.Key, graph));
-                })
-                .ToDictionary(tup => tup.Item1, tup => tup.Item2);
-
-                p.Hide();
-            } else
-            {
-                vs = addrs
-                .Select(kvp => new Tuple<AST.Address, Countable>(kvp.Key, Vector.run(kvp.Key, graph)))
-                .ToDictionary(tup => tup.Item1, tup => tup.Item2);
-            }
-            
-
-            var grps = vs.GroupBy(kvp => kvp.Value);
-
-            var d = new Dictionary<Countable, List<AST.Address>>();
-
-            foreach (var grp in grps)
-            {
-                var xs = new List<AST.Address>();
-                foreach (var kvp in grp)
-                {
-                    xs.Add(kvp.Key);
-                }
-                d.Add(grp.Key, xs);
-            }
-
-            return d;
         }
 
         private void ExtractToFPCore_Click(object sender, RibbonControlEventArgs e)
         {
-            //// init MemoDB
-            //var memodb = MemoDBOpt.Some(new MemoDBO());
-
-            //// get dependence graph
-            //var graph = new Depends.DAG(getWorkbook(), getApp(), ignore_parse_errors: false, dagBuilt: new DateTime());
-
-            //// get all formulas
-            //var formulas = getAllFormulas(graph, showProgress: true);
-
-            //// get inlined ASTs
-            //var fexprs = inlineFormulas(formulas, graph, memodb, showProgress: true);
-
-            //// which formulas are the same?
-            //var fgrps = groupFormulasByVector(formulas, graph, showProgress: true);
-
-            //// for each group, generate a single formula with a bunch of preconditions
-            //var fpcores = convertFormulaGroups(fgrps, fexprs, graph, showProgress: true);
-
-            //// get outputs as table
-            //var table = coresToTable(formulas, fexprs, fpcores);
-
-            //// prompt user to save as CSV
-            //toCSV(table);
         }
 
         private void checkForUnsupportedFormulas_Click(object sender, RibbonControlEventArgs e)
         {
-            //// init MemoDB
-            //var memodb = MemoDBOpt.Some(new MemoDBO());
-
-            //// get dependence graph
-            //var graph = new Depends.DAG(getWorkbook(), getApp(), ignore_parse_errors: false, dagBuilt: new DateTime());
-
-            //// get all formulas
-            //var formulas = getAllFormulas(graph, showProgress: true);
-
-            //// get inlined ASTs
-            //var fexprs = inlineFormulas(formulas, graph, memodb, showProgress: true);
-
-            //// which formulas are the same?
-            //var fgrps = groupFormulasByVector(formulas, graph, showProgress: true);
-
-            //// for each group, generate a single formula with a bunch of preconditions
-            //var fpcores = convertFormulaGroups(fgrps, fexprs, graph, showProgress: true);
-
-            //// find all of the formulas that convert to None
-            //var failures = fpcores.Where(kvp => FPCoreOption.get_IsNone(kvp.Value));
-
-            //// display on screen
-            //if (failures.Count() == 0)
-            //{
-            //    System.Windows.Forms.MessageBox.Show(
-            //        "All " + formulas.Count() + " formulas are supported."
-            //        + "\ncache hits: " + fexprs.Select(kvp => kvp.Value.CacheHits).Sum());
-            //} else
-            //{
-            //    // convert formulas to string
-            //    var msg = String.Join("\n", failures.Select(kvp => {
-            //        var addr = kvp.Key.First();
-            //        var form = graph.getFormulaAtAddress(addr);
-            //        var a1local = addr.A1Local();
-            //        string output = a1local + ": " + form;
-            //        return output;
-            //    })) + "\ncache hits: " + fexprs.Select(kvp => kvp.Value.CacheHits).Sum();
-
-            //    System.Windows.Forms.MessageBox.Show(msg);
-            //}
         }
 
         private void extractTest_Click(object sender, RibbonControlEventArgs e)
         {
-            var invocations = new Dictionary<Fingerprint, List<ExpressionTools.Vector[]>>();
-            var refvars = new Dictionary<Fingerprint, Dictionary<Countable, string>>();
-
-            // init MemoDB
-            var mdbo = MemoDBOpt.Some(new MemoDBO());
-
             // get dependence graph
             var graph = new Depends.DAG(getWorkbook(), getApp(), ignore_parse_errors: false, dagBuilt: new DateTime());
 
             // get all formulas
             var formulas = getAllFormulas(graph, showProgress: true);
 
-            // group formulas and invocations by resultant
-            foreach (var f in formulas)
-            {
-                var addr = f.Key;
+            // extract all
+            var fpcores = ExtractionLogic.Extract.extractAll(graph, formulas);
 
-                // return all references
-                var refs = ExpressionTools.transitiveRefs(addr, graph);
-
-                // compute resultant
-                var res = Vector.run(addr, graph);
-
-                // save each 'invocation'
-                if (!invocations.ContainsKey(res))
-                {
-                    invocations.Add(res, new List<ExpressionTools.Vector[]>());
-                }
-                invocations[res].Add(refs);
-
-                // assign a fresh variable to each unique reference
-                if (!refvars.ContainsKey(res))
-                {
-                    // never seen this function before
-                    var vm = new VariableMaker();
-                    refvars.Add(res, new Dictionary<Countable, string>());
-
-                    foreach (var vectref in refs)
-                    {
-                        var ref_resultant = ExceLint.Vector.RelativeVector(vectref.Head, vectref.Tail, graph);
-                        if (!refvars[res].ContainsKey(ref_resultant))
-                        {
-                            refvars[res].Add(ref_resultant, vm.nextVariable());
-                        }
-                    }
-                }
-            }
-
-            // produce a string for each fingerprinted 'function'
-            foreach (var fkvp in invocations)
-            {
-                Fingerprint fingerprint = fkvp.Key;
-                var fs = fkvp.Value;  // addresses of this 'function'
-
-                // inline all formulas
-                var edatas = fs.Select(invocations_for_addr => {
-                    var faddr = invocations_for_addr[0].Tail;
-                    return new Tuple<Source, ExpressionTools.EData>(faddr, inlineExpression(faddr, graph, mdbo));
-                }).ToDictionary(kvp => kvp.Item1, kvp => kvp.Item2);
-
-                // produce prelist
-                var prelist = new PreList();
-                foreach (var f_invocations in invocations[fingerprint])
-                {
-                    var bindings = new Dictionary<string, double>();
-                    foreach (var vectref in f_invocations)
-                    {
-                        var ref_resultant = ExceLint.Vector.RelativeVector(vectref.Head, vectref.Tail, graph);
-                        var variable = refvars[fingerprint][ref_resultant];
-
-                        // only bind values to variables if a reference refers
-                        // to data, not a formula
-                        if (edatas[vectref.Tail].Data.ContainsKey(vectref.Head))
-                        {
-                            var value = edatas[vectref.Tail].Data[vectref.Head];
-
-                            // have we already bound a variable to this value?
-                            if (bindings.ContainsKey(variable))
-                            {
-                                // it had better be the same value, dude
-                                System.Diagnostics.Debug.Assert(bindings[variable] == value);
-                                continue;
-                            }
-
-                            bindings.Add(variable, value);
-                        }
-                    }
-                    prelist.Add(bindings);
-                }
-
-                // convert an arbitrary instance of this 'function'
-                try
-                {
-                    // get invocations for this function
-                    var f_invocations = invocations[fingerprint];
-                    var invocation = f_invocations.First();
-                    var faddr = invocation.First().Tail;
-
-                    // get bindings for this invocation
-                    var bindings = new Dictionary<AST.Address, string>();
-                    foreach (var vectref in invocation)
-                    {
-                        var ref_resultant = ExceLint.Vector.RelativeVector(vectref.Head, vectref.Tail, graph);
-                        var variable = refvars[fingerprint][ref_resultant];
-                        if (!bindings.ContainsKey(vectref.Head))
-                        {
-                            bindings.Add(vectref.Head, variable);
-                        }
-                    }
-
-                    var fpcore = XL2FPCore.FormulaToFPCore(edatas[faddr].Expression, prelist, bindings);
-                    System.Windows.Forms.MessageBox.Show(fpcore.ToExpr(0));
-                } catch (XL2FPCore.InvalidExpressionException)
-                {
-                    // we can't convert everything; give up
-                }
-                
-            }
+            var output = String.Join("\n\n", fpcores);
+            System.Windows.Forms.MessageBox.Show(output);
         }
     }
 }
