@@ -71,11 +71,19 @@ namespace ExtractionLogic
                 Fingerprint fingerprint = fkvp.Key;
                 var vectors = fkvp.Value;  // vectors for this function's references
 
-                // inline all formulas
-                var edatas = vectors.Select(invocations_for_addr => {
-                    var faddr = invocations_for_addr[0].Tail;
-                    return new Tuple<Source, ExpressionTools.EData>(faddr, inlineExpression(faddr, graph, mdbo));
-                }).ToDictionary(kvp => kvp.Item1, kvp => kvp.Item2);
+                Dictionary<Source, ExpressionTools.EData> edatas = null;
+                try
+                {
+                    // inline all formulas
+                    edatas = vectors.Select(invocations_for_addr => {
+                        var faddr = invocations_for_addr[0].Tail;
+                        return new Tuple<Source, ExpressionTools.EData>(faddr, inlineExpression(faddr, graph, mdbo));
+                    }).ToDictionary(kvp => kvp.Item1, kvp => kvp.Item2);
+                } catch (Exception)
+                {
+                    // TODO: fix occasional out-of-bounds error for invocations_for_addr[0]
+                    continue;
+                }
 
                 PreList prelist = null;
                 try
