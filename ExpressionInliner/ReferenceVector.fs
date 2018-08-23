@@ -120,13 +120,10 @@
         let private originPath(dag: DAG) : Path =
             (dag.getWorkbookDirectory(), dag.getWorkbookName(), dag.getWorksheetNames().[0]);
 
-        let private vectorPathDiff(p1: Path)(p2: Path) : int =
-            if p1 <> p2 then 1 else 0
-
-        // the origin is defined as x = 0, y = 0, z = 0 if first sheet in the workbook else 1
-        let private pathDiff(p: Path)(dag: DAG) : int =
-            let op = originPath dag
-            vectorPathDiff p op
+        let private vectorPathDiff(p2: Path)(p1: Path)(graph: Depends.DAG) : int =
+            let p2pci = graph.getPathClosureIndex(p2)
+            let p1pci = graph.getPathClosureIndex(p1)
+            p2pci - p1pci
 
         // represent the position of the head of the vector relative to the tail, (x1,y1,z1)
         // if the reference is off-sheet then optionally ignore X and Y vector components
@@ -142,9 +139,9 @@
                         NoConstant(0, 0, dag.getPathClosureIndex(p2))
                 else
                     if includeLoc then
-                        NoConstantWithLoc(x1, y1, dag.getPathClosureIndex(p1), x2-x1, y2-y1, vectorPathDiff p2 p1)
+                        NoConstantWithLoc(x1, y1, dag.getPathClosureIndex(p1), x2-x1, y2-y1, vectorPathDiff p2 p1 dag)
                     else
-                        NoConstant(x2-x1, y2-y1, vectorPathDiff p2 p1)
+                        NoConstant(x2-x1, y2-y1, vectorPathDiff p2 p1 dag)
             | MixedFQVector(tail,head) ->
                 let (x1,y1,p1) = tail
                 let (x2,y2,p2) = head
@@ -161,9 +158,9 @@
                         NoConstant(0, 0, dag.getPathClosureIndex(p2))
                 else
                     if includeLoc then
-                        NoConstantWithLoc(x1, y1, dag.getPathClosureIndex(p1), x', y', vectorPathDiff p2 p1)
+                        NoConstantWithLoc(x1, y1, dag.getPathClosureIndex(p1), x', y', vectorPathDiff p2 p1 dag)
                     else
-                        NoConstant(x', y', vectorPathDiff p2 p1)
+                        NoConstant(x', y', vectorPathDiff p2 p1 dag)
             | MixedFQVectorWithConstant(tail,head) ->
                 let (x1,y1,p1) = tail
                 let (x2,y2,p2,c) = head
@@ -181,99 +178,9 @@
                         Constant(0, 0, dag.getPathClosureIndex(p2), c)
                 else
                     if includeLoc then
-                        ConstantWithLoc(x1, y1, dag.getPathClosureIndex(p1), x', y', vectorPathDiff p2 p1, c)
+                        ConstantWithLoc(x1, y1, dag.getPathClosureIndex(p1), x', y', vectorPathDiff p2 p1 dag, c)
                     else
-                        Constant(x', y', vectorPathDiff p2 p1, c)
-
-        // represent the position of the the head of the vector relative to the origin, (0,0,0)
-        let private relativeToOrigin(absVect: RichVector)(dag: DAG)(offSheetInsensitive: bool)(includeLoc: bool) : RelativeVector =
-            match absVect with
-            | AbsoluteFQVector(tail,head) ->
-                let (tx,ty,tp) = tail
-                let (x,y,p) = head
-                if offSheetInsensitive && tp <> p then
-                    if includeLoc then
-                        NoConstantWithLoc(tx, ty, dag.getPathClosureIndex(tp), 0, 0, dag.getPathClosureIndex(p))
-                    else
-                        NoConstant(0, 0, dag.getPathClosureIndex(p))
-                else
-                    if includeLoc then
-                        NoConstantWithLoc(tx, ty, dag.getPathClosureIndex(tp), x, y, pathDiff p dag)
-                    else
-                        NoConstant(x, y, pathDiff p dag)
-            | MixedFQVector(tail,head) ->
-                let (tx,ty,tp) = tail
-                let (x,y,p) = head
-                let x' = match x with | Abs(xa) -> xa | Rel(xr) -> xr
-                let y' = match y with | Abs(ya) -> ya | Rel(yr) -> yr
-                if offSheetInsensitive && tp <> p then
-                    if includeLoc then
-                        NoConstantWithLoc(tx, ty, dag.getPathClosureIndex(tp), 0, 0, dag.getPathClosureIndex(p))
-                    else
-                        NoConstant(0, 0, dag.getPathClosureIndex(p))
-                else
-                    if includeLoc then
-                        NoConstantWithLoc(tx, ty, dag.getPathClosureIndex(tp), x', y', pathDiff p dag)
-                    else
-                        NoConstant(x', y', pathDiff p dag)
-            | MixedFQVectorWithConstant(tail,head) ->
-                let (tx,ty,tp) = tail
-                let (x,y,p,c) = head
-                let x' = match x with | Abs(xa) -> xa | Rel(xr) -> xr
-                let y' = match y with | Abs(ya) -> ya | Rel(yr) -> yr
-                if offSheetInsensitive && tp <> p then
-                    if includeLoc then
-                        ConstantWithLoc(tx, ty, dag.getPathClosureIndex(p), 0, 0, dag.getPathClosureIndex(p), c)
-                    else
-                        Constant(0, 0, dag.getPathClosureIndex(p), c)
-                else
-                    if includeLoc then
-                        ConstantWithLoc(tx, ty, dag.getPathClosureIndex(p), x', y', pathDiff p dag, c)
-                    else
-                        Constant(x', y', pathDiff p dag, c)
-
-        let private L2Norm(X: double[]) : double =
-            Math.Sqrt(
-                Array.sumBy (fun x -> Math.Pow(x, 2.0)) X
-            )
-
-        let private relativeVectorToRealVectorArr(v: RelativeVector) : double[] =
-            match v with
-            | NoConstant(x,y,z) ->
-                [|
-                    System.Convert.ToDouble(x);
-                    System.Convert.ToDouble(y);
-                    System.Convert.ToDouble(z);
-                |]
-            | Constant(x,y,z,c) ->
-                [|
-                    System.Convert.ToDouble(x);
-                    System.Convert.ToDouble(y);
-                    System.Convert.ToDouble(z);
-                    c;
-                |]
-            | NoConstantWithLoc(x,y,z,dx,dy,dz) ->
-                [|
-                    System.Convert.ToDouble(x);
-                    System.Convert.ToDouble(y);
-                    System.Convert.ToDouble(z);
-                    System.Convert.ToDouble(dx);
-                    System.Convert.ToDouble(dy);
-                    System.Convert.ToDouble(dz);
-                |]
-            | ConstantWithLoc(x,y,z,dx,dy,dz,dc) ->
-                [|
-                    System.Convert.ToDouble(x);
-                    System.Convert.ToDouble(y);
-                    System.Convert.ToDouble(z);
-                    System.Convert.ToDouble(dx);
-                    System.Convert.ToDouble(dy);
-                    System.Convert.ToDouble(dz);
-                    System.Convert.ToDouble(dc);
-                |]
-
-        let private L2NormRV(v: RelativeVector) : double =
-            L2Norm(relativeVectorToRealVectorArr(v))
+                        Constant(x', y', vectorPathDiff p2 p1 dag, c)
 
         let private RVSum(v1: RelativeVector)(v2: RelativeVector) : RelativeVector =
             match v1,v2 with
@@ -290,9 +197,6 @@
                 // we don't add reference sources, just reference destinations
                 ConstantWithLoc(x1, y1, z1, dx1 + dx2, dy1 + dy2, dz1 + dz2, dc1 + dc2)
             | _ -> failwith "Cannot sum RelativeVectors of different subtypes."
-
-        let private L2NormRVSum(vs: RelativeVector[]) : double =
-            vs |> Array.map L2NormRV |> Array.sum
 
         let private Resultant(vs: RelativeVector[]) : RelativeVector =
             vs |>
@@ -452,7 +356,7 @@
         let RelativeVector(head: AST.Address)(tail: AST.Address)(dag: DAG) : Countable =
             // vector params
             let isMixed = true
-            let isOffSheetInsensitive = true
+            let isOffSheetInsensitive = false
             let includeConstant = true
             let includeLoc = false
             // get vector
@@ -472,7 +376,7 @@
                 let isMixed = true
                 let isTransitive = true
                 let isFormula = true
-                let isOffSheetInsensitive = true
+                let isOffSheetInsensitive = false
                 let tailIsAlwaysSourceFormula = true
                 let includeConstant = true
                 let includeLoc = false
