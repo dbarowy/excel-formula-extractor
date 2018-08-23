@@ -185,8 +185,11 @@ namespace ExcelFormulaExtractor
             // get all formulas
             var formulas = getAllFormulas(graph, showProgress: true);
 
+            // keep track of problem reports
+            var prs = new List<ExtractionLogic.ProblemReport>();
+
             // extract all
-            var fpcores = ExtractionLogic.Extract.extractAll(graph, formulas);
+            var fpcores = ExtractionLogic.Extract.extractAll(graph, formulas, prs);
 
             var output = String.Join("\n\n", fpcores);
             System.Windows.Forms.MessageBox.Show(output);

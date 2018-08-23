@@ -43,6 +43,50 @@ namespace ExtractionLogic
         }
     }
 
+    public interface ProblemReport { }
+    public class NoReferencesForInvocation : ProblemReport
+    {
+        private readonly Fingerprint _f;
+        private readonly string _w;
+        public NoReferencesForInvocation(Fingerprint f, string worksheet)
+        {
+            _f = f;
+            _w = worksheet;
+        }
+        public override string ToString()
+        {
+            return "No references for invocation of fingerprint " + _f.ToString() + " on worksheet " + _w;
+        }
+    }
+    public class AliasingDetected : ProblemReport
+    {
+        private readonly Fingerprint _f;
+        private readonly string _w;
+        public AliasingDetected(Fingerprint f, string worksheet)
+        {
+            _f = f;
+            _w = worksheet;
+        }
+        public override string ToString()
+        {
+            return "Aliasing detected for fingerprint " + _f.ToString() + " on worksheet " + _w;
+        }
+    }
+    public class CannotConvertExpression : ProblemReport
+    {
+        private readonly Fingerprint _f;
+        private readonly string _w;
+        public CannotConvertExpression(Fingerprint f, string worksheet)
+        {
+            _f = f;
+            _w = worksheet;
+        }
+        public override string ToString()
+        {
+            return "Cannot convert expression with fingerprint " + _f.ToString() + " on worksheet " + _w;
+        }
+    }
+
     public class Extract
     {
         private static ExpressionTools.EData inlineExpression(AST.Address addr, Depends.DAG graph, MemoDBOpt memodb)
@@ -54,7 +98,7 @@ namespace ExtractionLogic
             return ExpressionTools.flattenExpression(ast, graph, memodb);
         }
 
-        public static string[] extractAll(Depends.DAG graph, Dictionary<AST.Address, string> formulas)
+        public static string[] extractAll(Depends.DAG graph, Dictionary<AST.Address, string> formulas, List<ProblemReport> pr)
         {
             // init MemoDB
             var mdbo = MemoDBOpt.Some(new MemoDBO());
@@ -68,20 +112,21 @@ namespace ExtractionLogic
             // produce a string for each fingerprinted 'function'
             foreach (var fkvp in g.Functions)
             {
-                Fingerprint fingerprint = fkvp.Key;
-                var vectors = fkvp.Value;  // vectors for this function's references
+                Fingerprint fingerprint = fkvp.Key; // the fingerprint that characterizes the 'function'
+                var invocations = fkvp.Value;       // invocations of this function
 
                 Dictionary<Source, ExpressionTools.EData> edatas = null;
                 try
                 {
-                    // inline all formulas
-                    edatas = vectors.Select(invocations_for_addr => {
-                        var faddr = invocations_for_addr[0].Tail;
+                    // inline all formulas and index by invoking cell address
+                    edatas = invocations.Select(references => {
+                        var faddr = references[0].Tail;
                         return new Tuple<Source, ExpressionTools.EData>(faddr, inlineExpression(faddr, graph, mdbo));
                     }).ToDictionary(kvp => kvp.Item1, kvp => kvp.Item2);
                 } catch (Exception)
                 {
                     // TODO: fix occasional out-of-bounds error for invocations_for_addr[0]
+                    pr.Add(new NoReferencesForInvocation(fingerprint, graph.getWorkbookName()));
                     continue;
                 }
 
@@ -93,6 +138,7 @@ namespace ExtractionLogic
                 } catch (Exception)
                 {
                     // sometimes aliasing bugs pop up; if that happens, move on
+                    pr.Add(new AliasingDetected(fingerprint, graph.getWorkbookName()));
                     continue;
                 }
 
@@ -105,6 +151,7 @@ namespace ExtractionLogic
                 catch (Exception)
                 {
                     // we can't convert everything; give up
+                    pr.Add(new CannotConvertExpression(fingerprint, graph.getWorkbookName()));
                 }
             }
 
