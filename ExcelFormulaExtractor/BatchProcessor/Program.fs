@@ -33,24 +33,31 @@ let main argv =
             let shortf = (System.IO.Path.GetFileName file)
 
             printfn "Opening: %A" shortf
-            using(app.OpenWorkbook(file)) (fun wb ->
-                let problems = new System.Collections.Generic.List<ExtractionLogic.ProblemReport>()
 
-                printfn "Building dependence graph: %A" shortf
-                let graph = wb.buildDependenceGraph()
+            try
+                using(app.OpenWorkbook(file)) (fun wb ->
+                    let problems = new System.Collections.Generic.List<ExtractionLogic.ProblemReport>()
 
-                printfn "Getting all formulas: %A" shortf
-                let formulas = getAllFormulas graph
+                    printfn "Building dependence graph: %A" shortf
+                    let graph = wb.buildDependenceGraph()
 
-                printfn "Converting to FPCores: %A" shortf
-                let fpcores = ExtractionLogic.Extract.extractAll(graph, formulas, problems)
+                    printfn "Getting all formulas: %A" shortf
+                    let formulas = getAllFormulas graph
 
-                printfn "Writing to output file: %A" output
-                File.AppendAllLines(output, fpcores)
+                    printfn "Converting to FPCores: %A" shortf
+                    let fpcores = ExtractionLogic.Extract.extractAll(graph, formulas, problems)
 
-                printfn "Writing to problem report log: %A" prlog
-                File.AppendAllLines(prlog, problems |> Seq.map (fun pr -> pr.ToString()))
-            )
+                    printfn "Writing to output file: %A" output
+                    File.AppendAllLines(output, fpcores)
+
+                    printfn "Writing to problem report log: %A" prlog
+                    File.AppendAllLines(prlog, problems |> Seq.map (fun pr -> pr.ToString()))
+                )
+            with
+            | :? Exception as e ->
+                using (File.AppendText(prlog)) (fun sw ->
+                    sw.WriteLine("Cannot process file '" + file + "' with message: " + e.Message)
+                )
     )
 
     0

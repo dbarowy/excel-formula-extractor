@@ -76,14 +76,16 @@ namespace ExtractionLogic
     {
         private readonly Fingerprint _f;
         private readonly string _w;
-        public CannotConvertExpression(Fingerprint f, string worksheet)
+        private readonly string _em;
+        public CannotConvertExpression(Fingerprint f, string worksheet, string exception_message)
         {
             _f = f;
             _w = worksheet;
+            _em = exception_message;
         }
         public override string ToString()
         {
-            return "Cannot convert expression with fingerprint " + _f.ToString() + " on worksheet " + _w;
+            return "Cannot convert expression with fingerprint " + _f.ToString() + " on worksheet " + _w + "; message: \"" + _em + "\"";
         }
     }
 
@@ -148,10 +150,10 @@ namespace ExtractionLogic
                     var fpcore = convertToFPCore(g, fingerprint, edatas, graph, prelist);
                     fpcores.Add(fpcore.ToExpr(0));
                 }
-                catch (Exception)
+                catch (Exception e)
                 {
                     // we can't convert everything; give up
-                    pr.Add(new CannotConvertExpression(fingerprint, graph.getWorkbookName()));
+                    pr.Add(new CannotConvertExpression(fingerprint, graph.getWorkbookName(), e.Message));
                 }
             }
 
