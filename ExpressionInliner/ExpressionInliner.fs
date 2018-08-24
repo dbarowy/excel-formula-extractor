@@ -5,6 +5,9 @@ open System.Collections.Generic
 
 exception FlattenOperationNotSupportedException of string
 
+let AddrToKey(a: AST.Address) : AST.Address*bool*bool =
+    a, a.ColMode = AST.AddressMode.Absolute, a.RowMode = AST.AddressMode.Absolute
+
 let join (ms: Map<'a,'b> list) : Map<'a,'b> =
     ms
     |> List.map Map.toSeq
@@ -32,7 +35,7 @@ type Vector(tail: AST.Address, head: AST.Address) =
 // second element: the set of references closed over in the expression
 // third element: cache hits
 type FormulaData = AST.Expression*Map<AST.Address,double>
-type MemoDB = Dictionary<AST.Address,FormulaData>
+type MemoDB = Dictionary<AST.Address*bool*bool,FormulaData>
 
 // this method returns a tuple
 let rec private flattenedExpression(expr: AST.Expression)(graph: DAG)(dbo: MemoDB option) : FormulaData*int =
@@ -95,13 +98,13 @@ and private flattenedAddr(addr: AST.Address)(graph: DAG)(dbo: MemoDB option) : F
         // check the cache first
         match dbo with
         | Some db ->
-            if db.ContainsKey addr then
-                let res = db.[addr]
+            if db.ContainsKey (AddrToKey addr) then
+                let res = db.[(AddrToKey addr)]
                 res, 1
             else    // not in cache; save
                 let ast = graph.getASTofFormulaAt(addr)
                 let asti, ch = flattenedExpression ast graph dbo
-                db.Add(addr, asti)
+                db.Add((AddrToKey addr), asti)
                 asti, ch
           // no cache
         | None ->
@@ -123,7 +126,7 @@ and private flattenedAddr(addr: AST.Address)(graph: DAG)(dbo: MemoDB option) : F
         // save in cache
         match dbo with
         | Some db ->
-            db.Add(addr, fd)
+            db.Add((AddrToKey addr), fd)
         | None -> ()
         fd,0
 

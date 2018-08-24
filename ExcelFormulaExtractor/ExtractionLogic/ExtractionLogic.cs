@@ -4,8 +4,8 @@ using System.Collections.Generic;
 using PreList = System.Collections.Generic.List<System.Collections.Generic.Dictionary<string, double>>;
 using Vector = ExceLint.Vector.Vector;
 using Countable = ExceLint.Countable;
-using MemoDBO = System.Collections.Generic.Dictionary<AST.Address, System.Tuple<AST.Expression, Microsoft.FSharp.Collections.FSharpMap<AST.Address, double>>>;
-using MemoDBOpt = Microsoft.FSharp.Core.FSharpOption<System.Collections.Generic.Dictionary<AST.Address, System.Tuple<AST.Expression, Microsoft.FSharp.Collections.FSharpMap<AST.Address, double>>>>;
+using MemoDBO = System.Collections.Generic.Dictionary<System.Tuple<AST.Address, bool, bool>, System.Tuple<AST.Expression, Microsoft.FSharp.Collections.FSharpMap<AST.Address, double>>>;
+using MemoDBOpt = Microsoft.FSharp.Core.FSharpOption<System.Collections.Generic.Dictionary<System.Tuple<AST.Address,bool,bool>, System.Tuple<AST.Expression, Microsoft.FSharp.Collections.FSharpMap<AST.Address, double>>>>;
 using Fingerprint = ExceLint.Countable;
 using Source = AST.Address;
 using Functions = System.Collections.Generic.Dictionary<ExceLint.Countable, System.Collections.Generic.List<ExpressionTools.Vector[]>>;
@@ -265,6 +265,15 @@ namespace ExtractionLogic
             return prelist;
         }
 
+        // Address comparisons intentionally do not consider
+        // addressing mode, so B2 == $B$2 which is undesirable
+        // for use when checking for variable bindings; B2 and
+        // $B$2 should yield different variables.
+        private static Tuple<AST.Address, bool, bool> AddrToBindingKey(AST.Address a)
+        {
+            return new Tuple<AST.Address, bool, bool>(a, a.ColMode == AST.AddressMode.Absolute, a.RowMode == AST.AddressMode.Absolute);
+        }
+
         private static FPCoreAST.FPCore convertToFPCore(
             Group g,
             Fingerprint fingerprint,
@@ -278,7 +287,7 @@ namespace ExtractionLogic
             var faddr = invocation.First().Tail;
 
             // get bindings for this invocation
-            var bindings = new Dictionary<AST.Address, string>();
+            var bindings = new Dictionary<Tuple<AST.Address,bool,bool>, string>();
             foreach (var vectref in invocation)
             {
                 var ref_resultant = ExceLint.Vector.RelativeVector(vectref.Head, vectref.Tail, graph);
@@ -287,9 +296,10 @@ namespace ExtractionLogic
                 if (g.Variables[fingerprint].ContainsKey(ref_resultant))
                 {
                     var variable = g.Variables[fingerprint][ref_resultant];
-                    if (!bindings.ContainsKey(vectref.Head))
+                    var key = AddrToBindingKey(vectref.Head);
+                    if (!bindings.ContainsKey(key))
                     {
-                        bindings.Add(vectref.Head, variable);
+                        bindings.Add(key, variable);
                     }
                 }
             }
